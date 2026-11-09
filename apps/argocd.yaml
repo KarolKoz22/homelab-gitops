@@ -1,0 +1,26 @@
+# Argo CD manages its own installation from bootstrap/argocd.
+# Upgrading Argo CD = bump the version in that kustomization and push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/KarolKoz22/homelab-gitops.git
+    targetRevision: main
+    path: bootstrap/argocd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      # No prune: a bad commit here must never be able to delete Argo CD
+      # itself. Removed upstream objects get cleaned up by hand.
+      prune: false
+      selfHeal: true
+    syncOptions:
+      # Argo CD's CRDs are too large for client-side apply's
+      # last-applied-configuration annotation.
+      - ServerSideApply=true

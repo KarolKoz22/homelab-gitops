@@ -1,0 +1,46 @@
+# Argo CD itself, installed from the pinned upstream manifest.
+#
+# First install (by hand, once):
+#   kubectl apply -k bootstrap/argocd --server-side --force-conflicts
+# After that, apps/argocd.yaml makes Argo CD manage this directory itself,
+# so upgrading = bump the version below, commit, push.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: argocd
+
+resources:
+  - namespace.yaml
+  - https://raw.githubusercontent.com/argoproj/argo-cd/v3.6.1/manifests/install.yaml
+
+patches:
+  # Expose the UI/API on every node at https://<node-ip>:30443
+  # (argocd-server's own self-signed TLS, no ingress controller needed yet).
+  - target:
+      kind: Service
+      name: argocd-server
+    # JSON6902 ops, not a strategic merge: merging into the upstream ports
+    # list silently drops nodePort. Upstream order is [http, https].
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30080
+      - op: add
+        path: /spec/ports/1/nodePort
+        value: 30443
+
+  # Dex is only for SSO (GitHub/OIDC login). Not needed with the local admin
+  # user, and the workers only have ~1.9GB each, so don't run it.
+  - target:
+      kind: Deployment
+      name: argocd-dex-server
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: argocd-dex-server
+      spec:
+        replicas: 0

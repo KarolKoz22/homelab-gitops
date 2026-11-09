@@ -1,0 +1,24 @@
+# The "app of apps". Applied by hand once, after Argo CD is installed:
+#   kubectl apply -f bootstrap/root-app.yaml
+# It watches apps/ — every Application manifest committed there gets
+# created and synced automatically. Adding a component = adding a file.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/KarolKoz22/homelab-gitops.git
+    targetRevision: main
+    path: apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
