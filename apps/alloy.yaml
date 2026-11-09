@@ -1,0 +1,29 @@
+# Grafana Alloy: DaemonSet log agent. Tails container logs and the systemd
+# journal on every node and pushes them to Loki (apps/loki.yaml).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: alloy
+      targetRevision: 1.14.3          # Alloy v1.21.2
+      helm:
+        releaseName: alloy
+        valueFiles:
+          - $values/values/alloy.yaml
+    - repoURL: https://github.com/KarolKoz22/homelab-gitops.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

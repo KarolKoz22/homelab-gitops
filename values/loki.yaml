@@ -1,0 +1,73 @@
+# Values for the Loki chart (version pinned in apps/loki.yaml).
+# Single-binary mode: one pod does ingest, storage and querying, with chunks and
+# index on a local-path PVC. The chart's default (SimpleScalable + object
+# storage + memcached caches) needs several GB of RAM; this needs ~200MB.
+deploymentMode: SingleBinary
+
+loki:
+  # Single tenant: no X-Scope-OrgID header needed by Alloy or Grafana.
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  # Keep 7 days of logs, same as Prometheus keeps metrics. The compactor
+  # actually deletes old chunks; without retention_enabled it never does.
+  limits_config:
+    retention_period: 168h
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    storageClass: local-path
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 192Mi
+    limits:
+      memory: 512Mi
+
+# SimpleScalable components: unused in SingleBinary mode.
+backend:
+  replicas: 0
+read:
+  replicas: 0
+write:
+  replicas: 0
+
+# nginx in front of Loki — only useful with multiple components/tenants.
+gateway:
+  enabled: false
+
+# memcached caches: each defaults to GBs of memory. Not worth it at this scale.
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+
+# Synthetic log generator + helm test pod.
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
+
+# Let the Prometheus Operator scrape Loki's own metrics (ingest rate, errors).
+# Prometheus picks up ServiceMonitors from all namespaces (see
+# values/kube-prometheus-stack.yaml), so no extra labels are needed.
+monitoring:
+  serviceMonitor:
+    enabled: true

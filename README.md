@@ -25,8 +25,10 @@ apps/
 ├── argocd.yaml                 ──► bootstrap/argocd               (Argo CD manages itself)
 ├── local-path-provisioner.yaml ──► platform/local-path-provisioner (default StorageClass)
 ├── sealed-secrets.yaml         ──► Helm chart sealed-secrets 2.22.0 (encrypted secrets in git)
-└── kube-prometheus-stack.yaml  ──► Helm chart 92.14.0 + values/kube-prometheus-stack.yaml
-                                    + platform/monitoring/ (Grafana admin SealedSecret)
+├── kube-prometheus-stack.yaml  ──► Helm chart 92.14.0 + values/kube-prometheus-stack.yaml
+│                                   + platform/monitoring/ (Grafana admin SealedSecret)
+├── loki.yaml                   ──► Helm chart 7.5.0 + values/loki.yaml   (log storage)
+└── alloy.yaml                  ──► Helm chart 1.14.3 + values/alloy.yaml (log agent, DaemonSet)
 ```
 
 `root` is an Argo CD Application whose only job is to create the other
@@ -34,7 +36,8 @@ Applications. Adding a component to the cluster = committing one more file
 to `apps/`. Deleting the file removes the component (`prune: true`).
 
 Every upstream dependency is pinned (Argo CD `v3.6.1`, local-path-provisioner
-`v0.0.37`, sealed-secrets chart `2.22.0`, kube-prometheus-stack chart `92.14.0`), so the cluster only changes when this repo changes.
+`v0.0.37`, sealed-secrets chart `2.22.0`, kube-prometheus-stack chart `92.14.0`,
+loki chart `7.5.0`, alloy chart `1.14.3`), so the cluster only changes when this repo changes.
 
 ## Layout
 
@@ -75,6 +78,31 @@ Any node IP works for every NodePort.
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 ```
 
+## Observability
+
+```
+            metrics                                     logs
+node-exporter, kubelet, apiserver,       container stdout/stderr + node journal
+kube-state-metrics, coredns, ...                       │
+          │  scraped by                                │  tailed by Alloy (DaemonSet)
+          ▼                                            ▼
+     Prometheus (7d, 5Gi PVC)                   Loki (7d, 5Gi PVC)
+          │                                            │
+          └────────────────► Grafana ◄─────────────────┘
+          │
+          ▼
+     Alertmanager
+```
+
+Everything is in the `monitoring` namespace. Example LogQL queries for
+Grafana → Explore → Loki:
+
+```
+{namespace="argocd"} |= "error"                 # Argo CD errors
+{job="node/journal", unit="kubelet.service"}    # kubelet logs from every node
+sum by (namespace) (rate({namespace=~".+"}[5m])) # log volume per namespace
+```
+
 ## Secrets
 
 Plain Kubernetes Secrets are only base64-encoded, so they never go in this
@@ -101,5 +129,5 @@ kubectl -n kube-system get secret -l sealedsecrets.bitnami.com/sealed-secrets-ke
 - [x] Sealed Secrets
 - [x] kube-prometheus-stack (Prometheus Operator, Alertmanager, Grafana)
 - [ ] Scrape etcd / scheduler / controller-manager / kube-proxy (needs kubeadm bind-address changes)
-- [ ] Loki + Alloy for logs
+- [x] Loki + Alloy for logs (container logs + node journal)
 - [ ] Monitoring the laptop (hypervisor) itself: node_exporter + Alloy

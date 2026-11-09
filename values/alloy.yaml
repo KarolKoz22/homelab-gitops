@@ -1,0 +1,129 @@
+# Values for the Grafana Alloy chart (version pinned in apps/alloy.yaml).
+# Runs as a DaemonSet — one Alloy per node — and ships two kinds of logs to Loki:
+#   1. every container's stdout/stderr   (/var/log/pods on the node)
+#   2. the node's systemd journal        (kubelet, containerd, kernel, sshd...)
+
+controller:
+  type: daemonset
+  # Also run on the control plane, so its kubelet / static pod logs are shipped.
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+alloy:
+  # Mount the node's /var/log read-only into the Alloy container.
+  mounts:
+    varlog: true
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+  configMap:
+    content: |
+      // ---------------------------------------------------------------------
+      // 1. Container logs
+      // ---------------------------------------------------------------------
+
+      // Ask the Kubernetes API for the pods on THIS node only (HOSTNAME is set
+      // to spec.nodeName by the chart), so each Alloy reads only local files.
+      discovery.kubernetes "pods" {
+        role = "pod"
+        selectors {
+          role  = "pod"
+          field = "spec.nodeName=" + sys.env("HOSTNAME")
+        }
+      }
+
+      // Turn pod metadata into Loki labels, and point each target at its log
+      // file: /var/log/pods/<ns>_<pod>_<uid>/<container>/<n>.log
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_node_name"]
+          target_label  = "node"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          target_label  = "app"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          target_label  = "__path__"
+          replacement   = "/var/log/pods/*$1/*.log"
+        }
+      }
+
+      local.file_match "pods" {
+        path_targets = discovery.relabel.pods.output
+      }
+
+      loki.source.file "pods" {
+        targets    = local.file_match.pods.targets
+        forward_to = [loki.process.pods.receiver]
+      }
+
+      // containerd writes logs in CRI format ("<time> stdout F <message>");
+      // stage.cri strips that prefix and uses the real timestamp.
+      loki.process "pods" {
+        stage.cri {}
+        forward_to = [loki.write.default.receiver]
+      }
+
+      // ---------------------------------------------------------------------
+      // 2. Node journal (kubelet, containerd, kernel...)
+      // ---------------------------------------------------------------------
+
+      loki.relabel "journal" {
+        forward_to = []
+        rule {
+          source_labels = ["__journal__systemd_unit"]
+          target_label  = "unit"
+        }
+        rule {
+          source_labels = ["__journal_priority_keyword"]
+          target_label  = "level"
+        }
+      }
+
+      loki.source.journal "node" {
+        path          = "/var/log/journal"
+        max_age       = "12h"
+        relabel_rules = loki.relabel.journal.rules
+        labels        = {
+          job  = "node/journal",
+          node = sys.env("HOSTNAME"),
+        }
+        forward_to = [loki.write.default.receiver]
+      }
+
+      // ---------------------------------------------------------------------
+      // Destination
+      // ---------------------------------------------------------------------
+
+      loki.write "default" {
+        endpoint {
+          url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }
+
+# Prometheus scrapes Alloy's own metrics (lines read, bytes sent, errors).
+serviceMonitor:
+  enabled: true
