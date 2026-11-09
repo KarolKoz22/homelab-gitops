@@ -69,6 +69,17 @@ alloy:
           target_label  = "__path__"
           replacement   = "/var/log/pods/*$1/*.log"
         }
+        // Static pods (etcd, kube-apiserver, kube-scheduler,
+        // kube-controller-manager) are started by the kubelet from files, so
+        // their log dir is named after the manifest hash, not the API pod UID.
+        // Only static pods carry this annotation; for them, override the path.
+        rule {
+          source_labels = ["__meta_kubernetes_pod_annotation_kubernetes_io_config_hash", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          regex         = "(.+)/(.+)"
+          target_label  = "__path__"
+          replacement   = "/var/log/pods/*$1/$2/*.log"
+        }
       }
 
       local.file_match "pods" {
