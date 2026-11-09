@@ -88,12 +88,14 @@ grafana:
   # important lives in Grafana's own database.
   persistence:
     enabled: false
+  # Grafana 12 peaks well above 384Mi when rendering the bundled dashboards
+  # (was OOMKilled at that limit), so leave real headroom.
   resources:
     requests:
       cpu: 50m
-      memory: 128Mi
+      memory: 256Mi
     limits:
-      memory: 384Mi
+      memory: 768Mi
 
 # --- Operator and exporters ---------------------------------------------------
 prometheusOperator:
