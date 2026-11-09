@@ -1,0 +1,41 @@
+# Prometheus Operator, Prometheus, Alertmanager, Grafana, kube-state-metrics,
+# node-exporter, plus the standard dashboards and alert rules.
+#
+# Three sources (Argo CD multi-source):
+#   1. the upstream Helm chart, pinned
+#   2. this repo, referenced as $values, so the chart reads
+#      values/kube-prometheus-stack.yaml from git
+#   3. this repo's platform/monitoring/ — extra manifests for the namespace
+#      (the Grafana admin SealedSecret)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 92.14.0
+      helm:
+        releaseName: kube-prometheus-stack
+        valueFiles:
+          - $values/values/kube-prometheus-stack.yaml
+    - repoURL: https://github.com/KarolKoz22/homelab-gitops.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/KarolKoz22/homelab-gitops.git
+      targetRevision: main
+      path: platform/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The Prometheus Operator CRDs are too large for client-side apply.
+      - ServerSideApply=true

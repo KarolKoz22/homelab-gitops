@@ -1,0 +1,111 @@
+# Values for kube-prometheus-stack (chart version pinned in
+# apps/kube-prometheus-stack.yaml). Only overrides live here; everything else
+# is the chart default. Sized for workers with ~1.9GB RAM each.
+
+# --- Control-plane targets ----------------------------------------------------
+# kubeadm binds etcd, kube-scheduler and kube-controller-manager metrics to
+# 127.0.0.1, and kube-proxy to 127.0.0.1:10249, so Prometheus can't reach them
+# and they'd show as permanently DOWN (plus fire *Down alerts). Disabled until
+# the bind addresses are changed on the nodes; disabling these also drops their
+# alert rules, so there are no false alerts.
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+# --- Prometheus ---------------------------------------------------------------
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 30090
+  prometheusSpec:
+    # Pick up ServiceMonitors/PodMonitors/rules from any namespace and any
+    # release, not just ones labelled for this Helm release — so other apps in
+    # this repo can ship their own monitoring config.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+
+    retention: 7d
+    retentionSize: 4GB          # must stay below the PVC size
+    resources:
+      requests:
+        cpu: 100m
+        memory: 384Mi
+      limits:
+        memory: 1Gi
+    # Dynamically provisioned by local-path (the default StorageClass).
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 5Gi
+
+# --- Alertmanager -------------------------------------------------------------
+alertmanager:
+  service:
+    type: NodePort
+    nodePort: 30093
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+
+# --- Grafana ------------------------------------------------------------------
+grafana:
+  # Admin credentials come from a SealedSecret committed in
+  # platform/monitoring/grafana-admin.sealed.yaml — never a plain password.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  service:
+    type: NodePort
+    nodePort: 30000
+  # No PVC: datasources and dashboards are provisioned from config, so nothing
+  # important lives in Grafana's own database.
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 384Mi
+
+# --- Operator and exporters ---------------------------------------------------
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      memory: 64Mi

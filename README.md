@@ -24,7 +24,9 @@ bootstrap/root-app.yaml   ──► watches apps/
 apps/
 ├── argocd.yaml                 ──► bootstrap/argocd               (Argo CD manages itself)
 ├── local-path-provisioner.yaml ──► platform/local-path-provisioner (default StorageClass)
-└── sealed-secrets.yaml         ──► Helm chart sealed-secrets 2.22.0 (encrypted secrets in git)
+├── sealed-secrets.yaml         ──► Helm chart sealed-secrets 2.22.0 (encrypted secrets in git)
+└── kube-prometheus-stack.yaml  ──► Helm chart 92.14.0 + values/kube-prometheus-stack.yaml
+                                    + platform/monitoring/ (Grafana admin SealedSecret)
 ```
 
 `root` is an Argo CD Application whose only job is to create the other
@@ -32,7 +34,7 @@ Applications. Adding a component to the cluster = committing one more file
 to `apps/`. Deleting the file removes the component (`prune: true`).
 
 Every upstream dependency is pinned (Argo CD `v3.6.1`, local-path-provisioner
-`v0.0.37`, sealed-secrets chart `2.22.0`), so the cluster only changes when this repo changes.
+`v0.0.37`, sealed-secrets chart `2.22.0`, kube-prometheus-stack chart `92.14.0`), so the cluster only changes when this repo changes.
 
 ## Layout
 
@@ -41,7 +43,8 @@ bootstrap/
   argocd/          Argo CD install: pinned upstream manifest + kustomize patches
   root-app.yaml    the root Application (app of apps)
 apps/              one Argo CD Application per component
-platform/          cluster-level components (storage, later: monitoring, secrets)
+platform/          extra manifests per component (e.g. SealedSecrets)
+values/            Helm values for charts deployed from apps/
 ```
 
 ## Bootstrap (one time, on a fresh cluster)
@@ -58,7 +61,14 @@ From here on, every change goes through a commit.
 
 ## Access
 
-Argo CD UI: https://192.168.122.152:30443 (any node IP works; self-signed cert)
+Any node IP works for every NodePort.
+
+| Service | URL |
+|---|---|
+| Argo CD | https://192.168.122.152:30443 (self-signed cert) |
+| Grafana | http://192.168.122.152:30000 |
+| Prometheus | http://192.168.122.152:30090 |
+| Alertmanager | http://192.168.122.152:30093 |
 
 ```bash
 # initial admin password
@@ -89,6 +99,7 @@ kubectl -n kube-system get secret -l sealedsecrets.bitnami.com/sealed-secrets-ke
 - [x] Argo CD (self-managed)
 - [x] Dynamic storage: local-path-provisioner
 - [x] Sealed Secrets
-- [ ] kube-prometheus-stack (Prometheus Operator, Alertmanager, Grafana)
+- [x] kube-prometheus-stack (Prometheus Operator, Alertmanager, Grafana)
+- [ ] Scrape etcd / scheduler / controller-manager / kube-proxy (needs kubeadm bind-address changes)
 - [ ] Loki + Alloy for logs
 - [ ] Monitoring the laptop (hypervisor) itself: node_exporter + Alloy
