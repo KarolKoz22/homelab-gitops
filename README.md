@@ -23,7 +23,8 @@ with Ansible (`../ansible`).
 bootstrap/root-app.yaml   ──► watches apps/
 apps/
 ├── argocd.yaml                 ──► bootstrap/argocd               (Argo CD manages itself)
-└── local-path-provisioner.yaml ──► platform/local-path-provisioner (default StorageClass)
+├── local-path-provisioner.yaml ──► platform/local-path-provisioner (default StorageClass)
+└── sealed-secrets.yaml         ──► Helm chart sealed-secrets 2.22.0 (encrypted secrets in git)
 ```
 
 `root` is an Argo CD Application whose only job is to create the other
@@ -31,7 +32,7 @@ Applications. Adding a component to the cluster = committing one more file
 to `apps/`. Deleting the file removes the component (`prune: true`).
 
 Every upstream dependency is pinned (Argo CD `v3.6.1`, local-path-provisioner
-`v0.0.37`), so the cluster only changes when this repo changes.
+`v0.0.37`, sealed-secrets chart `2.22.0`), so the cluster only changes when this repo changes.
 
 ## Layout
 
@@ -64,11 +65,30 @@ Argo CD UI: https://192.168.122.152:30443 (any node IP works; self-signed cert)
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 ```
 
+## Secrets
+
+Plain Kubernetes Secrets are only base64-encoded, so they never go in this
+repo. Instead they're encrypted with the cluster's public key using
+[Sealed Secrets](https://github.com/bitnami/sealed-secrets), and only the
+controller running in the cluster can decrypt them:
+
+```bash
+kubectl create secret generic my-secret -n my-ns --from-literal=key=value \
+  --dry-run=client -o yaml | kubeseal --format yaml > path/to/my-secret.sealed.yaml
+```
+
+The decryption key lives only in the cluster. **Back it up outside git** —
+without it, a rebuilt cluster can't decrypt anything committed here:
+
+```bash
+kubectl -n kube-system get secret -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key.backup.yaml
+```
+
 ## Roadmap
 
 - [x] Argo CD (self-managed)
 - [x] Dynamic storage: local-path-provisioner
-- [ ] Sealed Secrets
+- [x] Sealed Secrets
 - [ ] kube-prometheus-stack (Prometheus Operator, Alertmanager, Grafana)
 - [ ] Loki + Alloy for logs
 - [ ] Monitoring the laptop (hypervisor) itself: node_exporter + Alloy
