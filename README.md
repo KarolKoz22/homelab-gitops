@@ -44,9 +44,10 @@ loki chart `7.5.0`, alloy chart `1.14.3`), so the cluster only changes when this
 
 Nothing in the cluster is reachable from the internet except through an
 outbound-only Cloudflare Tunnel (`platform/cloudflared`, 2 replicas). Its
-routing is in `platform/cloudflared/config.yaml`, and it publishes exactly one
-endpoint: `https://argocd-api.karolkozlowski.pl/api/v1/applications`, the
-Argo CD app list behind the live panel on karolkozlowski.pl/projects. Callers
+routing is in `platform/cloudflared/config.yaml`, and it publishes exactly two
+read-only endpoints on `https://argocd-api.karolkozlowski.pl`: `/api/v1/applications`
+(the app list) and `/api/v1/applications/<app>/resource-tree` (the dependency
+graph), both behind the live panel on karolkozlowski.pl/projects. Callers
 need the token of the read-only `portal` account (get on applications/projects
 only); every other path, including the Argo CD UI and login, is a 404 at the edge.
 
