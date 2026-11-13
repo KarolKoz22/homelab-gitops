@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cloudflared
+
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  # Tunnel credentials JSON (from `cloudflared tunnel create`), sealed.
+  - credentials.sealed.yaml
+
+configMapGenerator:
+  # Hash suffix => editing config.yaml rolls the Deployment automatically.
+  - name: cloudflared-config
+    files:
+      - config.yaml

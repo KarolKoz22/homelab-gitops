@@ -1,0 +1,19 @@
+# Cloudflare Tunnel: publishes the read-only Argo CD app list for the personal website.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudflared
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/KarolKoz22/homelab-gitops.git
+    targetRevision: main
+    path: platform/cloudflared
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cloudflared
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

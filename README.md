@@ -28,7 +28,8 @@ apps/
 ├── kube-prometheus-stack.yaml  ──► Helm chart 92.14.0 + values/kube-prometheus-stack.yaml
 │                                   + platform/monitoring/ (Grafana admin SealedSecret)
 ├── loki.yaml                   ──► Helm chart 7.5.0 + values/loki.yaml   (log storage)
-└── alloy.yaml                  ──► Helm chart 1.14.3 + values/alloy.yaml (log agent, DaemonSet)
+├── alloy.yaml                  ──► Helm chart 1.14.3 + values/alloy.yaml (log agent, DaemonSet)
+└── cloudflared.yaml            ──► platform/cloudflared (Cloudflare Tunnel, see below)
 ```
 
 `root` is an Argo CD Application whose only job is to create the other
@@ -38,6 +39,19 @@ to `apps/`. Deleting the file removes the component (`prune: true`).
 Every upstream dependency is pinned (Argo CD `v3.6.1`, local-path-provisioner
 `v0.0.37`, sealed-secrets chart `2.22.0`, kube-prometheus-stack chart `92.14.0`,
 loki chart `7.5.0`, alloy chart `1.14.3`), so the cluster only changes when this repo changes.
+
+## Public exposure: Cloudflare Tunnel
+
+Nothing in the cluster is reachable from the internet except through an
+outbound-only Cloudflare Tunnel (`platform/cloudflared`, 2 replicas). Its
+routing is in `platform/cloudflared/config.yaml`, and it publishes exactly one
+endpoint: `https://argocd-api.karolkozlowski.pl/api/v1/applications`, the
+Argo CD app list behind the live panel on karolkozlowski.pl/projects. Callers
+need the token of the read-only `portal` account (get on applications/projects
+only); every other path, including the Argo CD UI and login, is a 404 at the edge.
+
+Tunnel credentials are a SealedSecret. To rotate: `cloudflared tunnel create`,
+re-seal the JSON, update `tunnel:` in config.yaml.
 
 ## Layout
 

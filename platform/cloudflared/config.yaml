@@ -1,0 +1,19 @@
+# Locally-managed Cloudflare Tunnel: routing lives here in git, not in the
+# Cloudflare dashboard. Outbound-only, so no ports are opened on the laptop.
+#
+# Only ONE read-only Argo CD endpoint is published: the application list used
+# by the live panel on karolkozlowski.pl/projects (Vercel calls it with the
+# read-only "portal" token). Everything else, including the UI and the login
+# endpoint, gets a 404 from cloudflared and never reaches the cluster.
+tunnel: bd8ad1e4-90a7-4882-b606-e53aefb87b83
+credentials-file: /etc/cloudflared/creds/credentials.json
+metrics: 0.0.0.0:2000
+no-autoupdate: true
+ingress:
+  - hostname: argocd-api.karolkozlowski.pl
+    path: ^/api/v1/applications$
+    service: https://argocd-server.argocd.svc.cluster.local:443
+    originRequest:
+      # argocd-server's own self-signed cert; the public side uses Cloudflare's.
+      noTLSVerify: true
+  - service: http_status:404
