@@ -32,6 +32,32 @@ patches:
         path: /spec/ports/1/nodePort
         value: 30443
 
+  # Read-only local account "portal" for the personal website's /projects
+  # page. API-key only (no UI login). Generate its token once with:
+  #   argocd account generate-token --account portal
+  - target:
+      kind: ConfigMap
+      name: argocd-cm
+    patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: argocd-cm
+      data:
+        accounts.portal: apiKey
+  - target:
+      kind: ConfigMap
+      name: argocd-rbac-cm
+    patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: argocd-rbac-cm
+      data:
+        policy.csv: |
+          p, portal, applications, get, */*, allow
+          p, portal, projects, get, *, allow
+
   # Dex is only for SSO (GitHub/OIDC login). Not needed with the local admin
   # user, and the workers only have ~1.9GB each, so don't run it.
   - target:
