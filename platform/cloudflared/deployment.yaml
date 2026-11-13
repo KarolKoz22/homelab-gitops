@@ -34,13 +34,16 @@ spec:
           ports:
             - name: metrics
               containerPort: 2000
+          # /ready is 503 while cloudflared has no edge connection. It reconnects
+          # by itself (e.g. after a failed SRV lookup through the libvirt DNS),
+          # so only restart after ~2 minutes without any connection.
           livenessProbe:
             httpGet:
               path: /ready
               port: metrics
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 8
           resources:
             requests:
               cpu: 10m
